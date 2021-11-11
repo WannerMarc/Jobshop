@@ -1,1 +1,2 @@
-# Job-shop Scheduling with QAOA Bachelor's thesis Marc Wanner repository ##
+# Job-shop Scheduling with QAOA #
+## Bachelor's thesis Marc Wanner repository ##
