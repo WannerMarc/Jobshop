@@ -30,7 +30,7 @@ class QAOASolver(QCJobShopScheduler):
         self._postprocessor = postprocessor
         self._p = p
         self._theta = theta
-        if theta is None and preprocessor is None:
+        if theta is None:
             self._theta = default_init_theta(p)
         self._qaoa_data = None
         self._quantum_circuit = None
@@ -41,9 +41,10 @@ class QAOASolver(QCJobShopScheduler):
 
     def solve(self, num_reads=1000, energy_rank=0, optimal_plottable_solution=None, num_reads_eval=10000):
         if self._preprocessor is not None:
-            self.process_qaoa_data(self._preprocessor.preprocess(self._hamiltonian, self._data))
+            self._qaoa_data = self._preprocessor.get_preprocess_data(self._hamiltonian, self._data)
         # adjust circuit builder so that it only depends on theta
         self._circuit_builder.set_bqm(self._hamiltonian, self._num_qubits)
+        self._circuit_builder.set_preprocess_data(self._qaoa_data)
         # run QAOA
         self._theta = self._theta_optimizer.get_theta(self._hamiltonian, self._theta, num_reads, self._circuit_builder,
                                                       self._qc_sampler)
@@ -57,9 +58,7 @@ class QAOASolver(QCJobShopScheduler):
         self._total_counts = num_reads
         optimal_plottable_solution = self.extend_optimal_plottable_solution(optimal_plottable_solution)
         self.update_benchmarking(optimal_plottable_solution, num_reads_eval)
-
-    def process_qaoa_data(self, qaoa_data):
-        pass
+        print(self._benchmarking_data)
 
     def get_solver_name(self):
         return "QAOA"
@@ -161,12 +160,15 @@ class QAOASolver(QCJobShopScheduler):
         self._benchmarking_data["NUM_QUBITS"] = self._num_qubits
         self._benchmarking_data["P"] = self._p
         self._benchmarking_data["SEED"] = self._qc_sampler.get_seed()
+        self._benchmarking_data["THETA_INIT"] = self._theta
         #Results
         self._benchmarking_data["THETA"] = self._theta
         self._benchmarking_data["EXPECTED_ENERGY"] = "NONE"
+        self._benchmarking_data["OPTIMAL_ENERGY"] = "NONE"
         self._benchmarking_data["SUCCESS_PROBABILITY"] = "NONE"
         self._benchmarking_data["SOLUTION_ENERGY"] = "NONE"
         self._benchmarking_data["SOLUTION_PROBABILITY"] = "NONE"
+        self._benchmarking_data["QAOA_DATA"] = "NONE"
 
     def update_benchmarking(self, optimal_plottable_solution, num_reads_eval):
         #Input data
@@ -177,20 +179,34 @@ class QAOASolver(QCJobShopScheduler):
         self._benchmarking_data["EXPECTED_ENERGY"] = self._theta_optimizer.get_expected_energy()
         if optimal_plottable_solution is not None:
             optimal_energy = self.get_optimal_energy(optimal_plottable_solution)
+            self._benchmarking_data["OPTIMAL_ENERGY"] = optimal_energy
             self._benchmarking_data["SUCCESS_PROBABILITY"] = self.get_success_probability(self._theta, optimal_energy,
                                                                                           num_reads_eval)
             self._benchmarking_data["T_MIN"] = self._Tmin
         self._benchmarking_data["SOLUTION_ENERGY"] = self._sampleset.first.energy
         self._benchmarking_data["SOLUTION_PROBABILITY"] = self._sampleset.first.num_occurrences/num_reads_eval
+        self._benchmarking_data["QAOA_DATA"] = self._qaoa_data
 
     def draw_quantum_circuit(self):
         if self._quantum_circuit is None:
             self._quantum_circuit = self._circuit_builder.get_quantum_circuit(self._theta, self._hamiltonian, self._num_qubits)
         return self._quantum_circuit.decompose().decompose().draw(output='mpl')
 
+    def set_p(self, p):
+        self._p = p
+        self._benchmarking_data["P"] = self._p
+
+    def reset_theta(self, theta=None):
+        if theta is not None:
+            assert len(theta) == 2*self._p, "Set p to " + str(len(theta)/2) + " first before resetting theta"
+        else:
+            self._theta = default_init_theta(self._p)
+            self._benchmarking_data["THETA_INIT"] = self._theta
+            self._benchmarking_data["THETA"] = self._theta
+
 
 def default_init_theta(p):
-    return [math.pi * (1 + (i % 2)) * random() for i in range(2*p)]
+    return [math.pi * (1 + int(i/p)) * random() for i in range(2*p)]
 
 
 def key_to_dict(key: str):

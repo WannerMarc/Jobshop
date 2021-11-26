@@ -65,5 +65,8 @@ class JobShopScheduler(metaclass=ABCMeta):
         with open(filepath, 'w+') as fp:
             json.dump(self._benchmarking_data, fp)
 
+    def get_data(self) -> JobShopSchedulingData:
+        return self._data
+
 from CPLEXScheduler import CPLEXSolver
 from ResultPlotter import ResultPlotter

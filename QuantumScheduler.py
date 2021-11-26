@@ -32,3 +32,7 @@ class QCJobShopScheduler(JobShopScheduler, metaclass=ABCMeta):
 
 from QuantumSchedulers.QUBOSolvers.QUBOScheduler import SASolver, QASolver, SimpleQUBOSolver, QiskitQAOASolver
 from QuantumSchedulers.QAOA.QAOASolver import QAOASolver
+from QuantumSchedulers.QAOA.Preprocessors.CPLEXWarmstart import CPLEXWarmstart
+from QuantumSchedulers.QAOA.Preprocessors.SDPWarmstart import SDPWarmstart
+from QuantumSchedulers.QAOA.Preprocessors.SimpleWarmstart import SimpleWarmstart
+from QuantumSchedulers.QAOA.CircuitBuilders.WarmstartCircuitBuilder import WarmstartCircuitBuilder

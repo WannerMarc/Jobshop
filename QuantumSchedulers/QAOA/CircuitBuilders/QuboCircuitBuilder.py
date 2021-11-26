@@ -54,7 +54,8 @@ def u_problem_dense(gamma: float, num_qubits: int, hamiltonian):
         sumq = 0
         for k in range(num_qubits):
             sumq += hamiltonian[j, k]
-        qaoa_circuit.rz((hamiltonian[j, j] + sumq) * gamma, j)
+        if hamiltonian[j, j] + sumq != 0:
+            qaoa_circuit.rz((hamiltonian[j, j] + sumq) * gamma, j)
 
     # Apply R_ZZ rotational gates for entangled qubit rotations from cost layer
     for j in range(num_qubits):

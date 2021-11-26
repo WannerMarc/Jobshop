@@ -1,6 +1,7 @@
 from scipy.optimize import minimize
 from QuantumSchedulers.QAOA.QAOA import ThetaOptimizer, QCSampler, CircuitBuilder
 import numpy as np
+import math
 
 
 class QiskitMinimizer(ThetaOptimizer):
@@ -16,6 +17,7 @@ class QiskitMinimizer(ThetaOptimizer):
         self._hamiltonian = hamiltonian
 
         expectation = get_expectation(self._hamiltonian, self._circuit_builder, self._qc_sampler, self._num_reads)
+        p = int(len(theta)/2)
         res = minimize(expectation, theta, method=self._method)
         self._theta = res.x
         self._expected_energy = res.fun

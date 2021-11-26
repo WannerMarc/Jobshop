@@ -6,12 +6,15 @@ sys.path.append('../..')
 class Preprocessor(metaclass=ABCMeta):
     def __init__(self):
         # initialize member variable with some value if not needed for preprocessing e.g. self._hamiltonian = 0
+        # unfortunately have to extend qaoa_data with None entries for each different preprocess approach
+        # but this allows for preprocessing that affects different parts of the QAOA pipeline
         self._hamiltonian = None
         self._scheduling_data = None
-        self._qaoa_data: dict = None
+        self._qaoa_data: dict = {"CONTINUOUS_SOLUTION": None}
+        self._qaoa_data_name = None
 
     def get_preprocess_data(self, hamiltonian=None, scheduling_data=None):
-        if self._qaoa_data is None:
+        if self._qaoa_data[self._qaoa_data_name] is None:
             assert not (hamiltonian is None and self._hamiltonian is None)
             assert not (scheduling_data is None and self._scheduling_data is None)
             self.preprocess(hamiltonian, scheduling_data)
@@ -33,8 +36,11 @@ class CircuitBuilder(metaclass=ABCMeta):
         self._theta = None
         self._bqm = None
         self._num_qubits = None
+        self._qaoa_data: dict = None
 
-    def get_quantum_circuit(self, theta=None, bqm=None, num_qubits=None):
+    def get_quantum_circuit(self, theta=None, bqm=None, num_qubits=None, qaoa_data=None):
+        if qaoa_data is not None:
+            self.set_preprocess_data(qaoa_data)
         if self._quantum_circuit is None:
             assert theta is not None
             assert not(self._bqm is None and (bqm is None or num_qubits is None))
@@ -55,6 +61,9 @@ class CircuitBuilder(metaclass=ABCMeta):
     def set_bqm(self, bqm, num_qubits):
         self._bqm = bqm
         self._num_qubits = num_qubits
+
+    def set_preprocess_data(self, qaoa_data: dict):
+        self._qaoa_data = qaoa_data
 
     @abstractmethod
     def build_quantum_circuit(self, theta, bqm, num_qubits: int):
