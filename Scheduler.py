@@ -6,6 +6,7 @@ import matplotlib.patches as patches
 import random
 import json
 
+
 class JobShopScheduler(metaclass=ABCMeta):
     def __init__(self, data: JobShopSchedulingData):
         self._data = data
