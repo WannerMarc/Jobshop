@@ -15,8 +15,8 @@ class WarmstartCircuitBuilder(CircuitBuilder):
         self._num_qubits = num_qubits
         p = int(len(theta) / 2)
         self._quantum_circuit = QuantumCircuit(num_qubits)
-        gammas = theta[p:]
         betas = theta[:p]
+        gammas = theta[p:]
         u_problem = u_problem_dense
 
         if type(bqm).__name__ is 'BinaryQuadraticModel':

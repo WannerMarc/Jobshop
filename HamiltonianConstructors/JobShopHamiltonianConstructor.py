@@ -103,10 +103,16 @@ class JobShopHamiltonianConstructor(HamiltonianConstructor):
 
     def objective(self):
         H = 0
+        for i in range(self._m * self._J):
+            for t in range(self._T):
+                H += self.lin_f(t) * self._X[i, t]
+        """
+        H = 0
         for i in range(self._J):
             idx = self._m * (i + 1) - 1
             for t in range(self._T):
                 H += self.lin_f(t) * self._X[idx, t]
+        """
 
         return H
 

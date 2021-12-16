@@ -1,6 +1,7 @@
 from Reader import JobShopReader
 from HamiltonianConstructor import JobShopHamiltonianConstructor
-from QuantumScheduler import SASolver, QASolver, QAOASolver, QiskitQAOASolver, CPLEXWarmstart, SDPWarmstart, SimpleWarmstart, WarmstartCircuitBuilder
+from QuantumScheduler import SASolver, QASolver, QAOASolver, QiskitQAOASolver, CPLEXWarmstart, SDPWarmstart, \
+    SimpleWarmstart, WarmstartCircuitBuilder, IBMRealDevice
 from Scheduler import CPLEXSolver, ResultPlotter
 import matplotlib.pyplot as plt
 from qiskit import Aer, transpile
@@ -10,8 +11,8 @@ from JobShopSampler import JobShopSampler, nnull_condition
 import os
 from qiskit.circuit import Parameter
 from qiskit import QuantumCircuit
-from Tests.qaoa_basic_benchmarking import test_js_qaoa, compare_qaoa_versions
-
+from Tests.qaoa_basic_benchmarking import test_js_qaoa, compare_qaoa_versions, plot_result_times, plot_result_times_single_iteration
+from qiskit import IBMQ
 """Construction ongoing, main file is only used for trying out code"""
 
 def test_sampler():
@@ -85,26 +86,47 @@ def main():
     reader = JobShopReader()
     reader.read_problem_data(problem)
     data = reader.get_data()
+    solver = CPLEXSolver(data)
+    solver.solve()
+    solver.plot_solution()
+    plt.show()
+    hamiltonian_constructor = JobShopHamiltonianConstructor()
+    preprocessor = SDPWarmstart()
+    preprocessor2 = SimpleWarmstart()
+    solver = QAOASolver(data, hamiltonian_constructor, 4, 1, variable_pruning=True, objective_bias=0,
+                        qc_sampler=IBMRealDevice(IBMQ.load_account(), 'ibmq_lima'))
+    solver8 = QAOASolver(data, hamiltonian_constructor, 4, 1, variable_pruning=True, objective_bias=0)
+    compare_qaoa_versions("Solutions_real_device"+os.sep, [solver, solver8], range(1, 3), num_samples_per_setup=5,
+                          num_reads_opt=1000, num_reads_eval=10000, solver_names=["Real_device_QAOA", "QAOA"], mode='PLOT_ONLY')
+    plt.show()
+    """
+    solver = CPLEXSolver(data)
+    solver.solve()
+    solver.plot_solution()
+    plt.show()
+    """
+    solver1 = QAOASolver(data, hamiltonian_constructor, 4, 3, variable_pruning=True, objective_bias=1)
 
-    """
-    qc = QuantumCircuit(1)
-    lbda = Parameter("$\\lambda$")
-    qc.h(0)
-    qc.decompose().draw(output='mpl')
-    """#test_qaoa()
+    solver2 = QAOASolver(data, hamiltonian_constructor, 4, 3, variable_pruning=True, objective_bias=1,
+                         preprocessor=preprocessor, circuit_builder=WarmstartCircuitBuilder(epsilon=0.25))
+    solver3 = QAOASolver(data, hamiltonian_constructor, 4, 3, variable_pruning=True, objective_bias=1,
+                         preprocessor=preprocessor, circuit_builder=WarmstartCircuitBuilder(epsilon=0))
+    solver4 = QAOASolver(data, hamiltonian_constructor, 4, 3, variable_pruning=True, objective_bias=1,
+                         preprocessor=preprocessor2, circuit_builder=WarmstartCircuitBuilder(epsilon=0.25))
+    solver5 = QAOASolver(data, hamiltonian_constructor, 4, 3, variable_pruning=True, objective_bias=0,
+                         preprocessor=preprocessor, circuit_builder=WarmstartCircuitBuilder(epsilon=0))
+    solver6 = QAOASolver(data, hamiltonian_constructor, 4, 3, variable_pruning=True, objective_bias=0,
+                         preprocessor=preprocessor, circuit_builder=WarmstartCircuitBuilder(epsilon=0.4))
+    solver7 = QAOASolver(data, hamiltonian_constructor, 4, 3, variable_pruning=True, objective_bias=0,
+                         preprocessor=preprocessor, circuit_builder=WarmstartCircuitBuilder(epsilon=0.5))
 
-    solver1 = QAOASolver(data, JobShopHamiltonianConstructor(), 4, 3, variable_pruning=True, objective_bias=0,
-                         preprocessor=SDPWarmstart(), circuit_builder=WarmstartCircuitBuilder(epsilon=0.4))
-    """
-    solver2 = QAOASolver(data, JobShopHamiltonianConstructor(), 4, 3, variable_pruning=True, objective_bias=0,
-                         preprocessor=SDPWarmstart(), circuit_builder=WarmstartCircuitBuilder(epsilon=0.1))
-    solver3 = QAOASolver(data, JobShopHamiltonianConstructor(), 4, 3, variable_pruning=True, objective_bias=0,
-                         preprocessor=SDPWarmstart(), circuit_builder=WarmstartCircuitBuilder(epsilon=0.2))
-    solver4 = QAOASolver(data, JobShopHamiltonianConstructor(), 4, 3, variable_pruning=True, objective_bias=0)
-    """
-    compare_qaoa_versions("Solutions_optimal_u" + os.sep, [solver1], [1, 2, 3, 4, 5],
-                          num_samples_per_setup=20, num_reads_opt=1000,
-                          num_reads_eval=10000, solver_names=["WS-QAOA-0.4"])
+
+    compare_qaoa_versions("Solutions_nondegenerate" + os.sep, [solver1, solver2, solver3, solver4],
+                          range(1, 6),
+                          num_samples_per_setup=100, num_reads_opt=1000,
+                          num_reads_eval=10000, solver_names=["QAOA", "opt-WS-QAOA-0.25", "opt-WS-QAOA-0", "simple-WS-QAOA-0.25"])
+
+    #plot_result_times("Solutions_maxp" + os.sep)
 
     #plotter = ResultPlotter("Solutions\\res_0_1_0.txt")
     #plotter.plot_solution()
@@ -138,6 +160,7 @@ def main():
     #qaoa_solver.solve()
     #qaoa_solver.plot_solution()
     #plt.show()
+
 
 
 if __name__ == "__main__":

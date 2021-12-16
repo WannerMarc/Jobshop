@@ -42,7 +42,7 @@ def test_js_qaoa(problem_filename: str, solution_filenames: List[str], circuit_d
 
 def compare_qaoa_versions(solution_directory, solvers: List[QAOASolver], p_range: List[int],
                           num_samples_per_setup=10, num_reads_opt=1000, num_reads_eval=10000,
-                          solver_names: List[str]=None, mode='COMPUTE_AND_PLOT'):
+                          solver_names: List[str]=None, mode='COMPUTE_AND_PLOT', title="QAOA accuracy"):
 
     def sol_idx_to_filename(solver_idx: int, p: int, sample_idx: int):
         return "res_" + str(solver_idx) + "_" + str(p) + "_" + str(sample_idx) + ".txt"
@@ -66,7 +66,7 @@ def compare_qaoa_versions(solution_directory, solvers: List[QAOASolver], p_range
                     solver.reset_theta()
                     solver.solve(num_reads=num_reads_opt, num_reads_eval=num_reads_eval,
                                  optimal_plottable_solution=optimal_plottable_solution)
-                    solver.store_soution(solution_directory + os.sep + json_filename)
+                    solver.store_solution(solution_directory + os.sep + json_filename)
             solver_idx += 1
 
     if mode == 'COMPUTE_AND_PLOT' or mode == 'PLOT_ONLY':
@@ -93,7 +93,7 @@ def compare_qaoa_versions(solution_directory, solvers: List[QAOASolver], p_range
         df = df.astype({'success_probability': 'float64', 'p': 'int32'})
         markers = ["v" for solver in solvers]
         sns.lineplot(data=df, x="p", y='success_probability', hue='solver_name', style='solver_name', dashes=False,
-                     markers=markers)
+                     markers=markers).set_title(title)
 
 
 def make_names_unique(names: List[str]):
@@ -107,3 +107,44 @@ def make_names_unique(names: List[str]):
         else:
             unique_names.append(name)
     return unique_names
+
+
+#PRE: Folder with only solution files
+def plot_result_times(solution_directory):
+    data = []
+    for filename in os.listdir(solution_directory):
+        with open(solution_directory + filename) as json_file:
+            result_data = json.load(json_file)
+            p = result_data["P"]
+            time = result_data["TIME"]
+            circuit_building_time = (time["REPS"] + 1)*time["CIRCUIT_BUILDER"]
+            qc_sampling_time = (time["REPS"] + 1) * time["QCSAMPLER"]
+            optimizing_time = time["THETAOPTIMIZER"]
+            data.append([p, circuit_building_time, "CIRCUIT_BUILDER"])
+            data.append([p, qc_sampling_time, "QCSAMPLER"])
+            data.append([p, optimizing_time, "THETAOPTIMIZER"])
+    df = pd.DataFrame(np.array(data), columns=['p', 'runtime(s)', 'QAOA_parts'])
+    df = df.astype({'runtime(s)': 'float64', 'p': 'int32'})
+    markers = ["v" for i in range(3)]
+    sns.lineplot(data=df, x="p", y='runtime(s)', hue='QAOA_parts', style='QAOA_parts', dashes=False,
+                 markers=markers).set_title("QAOA simulator runtimes")
+
+
+def plot_result_times_single_iteration(solution_directory):
+    data = []
+    for filename in os.listdir(solution_directory):
+        with open(solution_directory + filename) as json_file:
+            result_data = json.load(json_file)
+            p = result_data["P"]
+            time = result_data["TIME"]
+            circuit_building_time = time["CIRCUIT_BUILDER"]
+            qc_sampling_time = time["QCSAMPLER"]
+            data.append([p, circuit_building_time, "CIRCUIT_BUILDER"])
+            data.append([p, qc_sampling_time, "QCSAMPLER"])
+    df = pd.DataFrame(np.array(data), columns=['p', 'runtime(s)', 'QAOA_parts'])
+    df = df.astype({'runtime(s)': 'float64', 'p': 'int32'})
+    markers = ["v" for i in range(2)]
+    sns.lineplot(data=df, x="p", y='runtime(s)', hue='QAOA_parts', style='QAOA_parts', dashes=False,
+                 markers=markers).set_title("Runtimes for Single Optimization step")
+
+

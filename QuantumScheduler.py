@@ -36,3 +36,4 @@ from QuantumSchedulers.QAOA.Preprocessors.CPLEXWarmstart import CPLEXWarmstart
 from QuantumSchedulers.QAOA.Preprocessors.SDPWarmstart import SDPWarmstart
 from QuantumSchedulers.QAOA.Preprocessors.SimpleWarmstart import SimpleWarmstart
 from QuantumSchedulers.QAOA.CircuitBuilders.WarmstartCircuitBuilder import WarmstartCircuitBuilder
+from QuantumSchedulers.QAOA.QCSamplers.IBMRealDevice import IBMRealDevice

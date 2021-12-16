@@ -7,13 +7,10 @@ class QiskitSimulator(QCSampler):
         super().__init__()
         self._simulator_type = simulator_type
 
-    def sample_qc(self, quantum_circuit, num_reads, simulator_type: str = None):
-        if simulator_type is not None:
-            self._simulator_type = simulator_type
+    def sample_qc(self, quantum_circuit, num_reads):
         self._backend = Aer.get_backend(self._simulator_type)
         qobj = transpile(quantum_circuit, self._backend)
         counts = self._backend.run(qobj, seed_simulator=self._seed, shots=num_reads).result().get_counts()
-
         return counts
 
     def get_name(self):

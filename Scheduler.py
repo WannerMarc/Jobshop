@@ -59,7 +59,7 @@ class JobShopScheduler(metaclass=ABCMeta):
                     t += 1
         ax.legend(handles=legend_elements)
 
-    def store_soution(self, filepath):
+    def store_solution(self, filepath):
         if self._plottable_solution is None:
             self.get_plottable_solution()
         self._benchmarking_data["PLOTTABLE_SOLUTION"] = self._plottable_solution.tolist()

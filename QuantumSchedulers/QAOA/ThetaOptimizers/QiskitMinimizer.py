@@ -17,8 +17,8 @@ class QiskitMinimizer(ThetaOptimizer):
         self._hamiltonian = hamiltonian
 
         expectation = get_expectation(self._hamiltonian, self._circuit_builder, self._qc_sampler, self._num_reads)
-        p = int(len(theta)/2)
-        res = minimize(expectation, theta, method=self._method)
+        bounds = [(0, math.pi) if k < theta.size / 2 else (0, 2 * math.pi) for k in range(theta.size)]
+        res = minimize(expectation, theta, method=self._method, bounds=bounds)
         self._theta = res.x
         self._expected_energy = res.fun
         if verbose:
@@ -34,16 +34,16 @@ def key_to_vector(key: str):
 
 def expected_value(counts: dict, num_reads: int, hamiltonian):
     F = 0
-    for bitstring, counts in counts.items():
+    for bitstring, count in counts.items():
         x = key_to_vector(bitstring)
-        F += counts*np.dot(np.dot(x, hamiltonian), x)
+        F += count*np.dot(np.dot(x, hamiltonian), x)
     return F/num_reads
 
 
 def get_expectation(hamiltonian, builder, sampler, num_reads):
     def execute_circ(theta):
         qc = builder.get_quantum_circuit(theta)
-        counts = sampler.sample_qc(qc, num_reads)
+        counts = sampler.get_counts(qc, num_reads)
         return expected_value(counts, num_reads, hamiltonian)
 
     return execute_circ

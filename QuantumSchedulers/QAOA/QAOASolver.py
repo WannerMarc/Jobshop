@@ -37,11 +37,17 @@ class QAOASolver(QCJobShopScheduler):
         self._counts = None
         self._total_counts = None
         self._Tmin = None
+        self._time: dict = {"HAMILTONIAN_CONSTRUCTOR": "NONE", "PREPROCESSOR": "NONE", "CIRCUIT_BUILDER": "NONE",
+                            "QCSAMPLER": "NONE", "THETAOPTIMIZER": "NONE", "POSTPROCESSOR": "NONE", "REPS": "NONE"}
         self.init_benchmarking()
 
-    def solve(self, num_reads=1000, energy_rank=0, optimal_plottable_solution=None, num_reads_eval=10000):
+    def solve(self, num_reads=1000, energy_rank=0, optimal_plottable_solution=None, num_reads_eval=10000,
+              preprocess_only=False):
+        self.reset_times()
         if self._preprocessor is not None:
             self._qaoa_data = self._preprocessor.get_preprocess_data(self._hamiltonian, self._data)
+        if preprocess_only:
+            return
         # adjust circuit builder so that it only depends on theta
         self._circuit_builder.set_bqm(self._hamiltonian, self._num_qubits)
         self._circuit_builder.set_preprocess_data(self._qaoa_data)
@@ -49,7 +55,7 @@ class QAOASolver(QCJobShopScheduler):
         self._theta = self._theta_optimizer.get_theta(self._hamiltonian, self._theta, num_reads, self._circuit_builder,
                                                       self._qc_sampler)
         self._quantum_circuit = self._circuit_builder.get_quantum_circuit(self._theta, self._hamiltonian, self._num_qubits)
-        self._counts = self._qc_sampler.sample_qc(self._quantum_circuit, num_reads_eval)
+        self._counts = self._qc_sampler.get_counts(self._quantum_circuit, num_reads_eval)
         if self._postprocessor is not None:
             postprocessing_input = None  # tbd, postprocessing input is a dummy, replace by arguments like qc, etc when
                                          # known what is needed
@@ -80,9 +86,11 @@ class QAOASolver(QCJobShopScheduler):
         ax.set_xticks([0, shape[1]/2, shape[1]])
         ax.set_yticks([0, shape[0]])
 
-    def get_success_probability(self, theta, optimal_energy, num_reads):
-        qc = self._circuit_builder.get_quantum_circuit(theta, self._hamiltonian, self._num_qubits)
-        counts = self._qc_sampler.sample_qc(qc, num_reads)
+    def get_success_probability(self, theta, optimal_energy, num_reads, run_simulation=True):
+        counts = self._counts
+        if run_simulation:
+            qc = self._circuit_builder.get_quantum_circuit(theta, self._hamiltonian, self._num_qubits)
+            counts = self._qc_sampler.get_counts(qc, num_reads)
         nsolved = 0
         energy_counts = to_energy_counts(counts, self._hamiltonian)
         for energy_count in energy_counts:
@@ -169,8 +177,10 @@ class QAOASolver(QCJobShopScheduler):
         self._benchmarking_data["SOLUTION_ENERGY"] = "NONE"
         self._benchmarking_data["SOLUTION_PROBABILITY"] = "NONE"
         self._benchmarking_data["QAOA_DATA"] = "NONE"
+        self._benchmarking_data["TIME"] = self._time
 
     def update_benchmarking(self, optimal_plottable_solution, num_reads_eval):
+        self.update_times()
         #Input data
         self._benchmarking_data["NUM_READS"] = self._total_counts
         self._benchmarking_data["NUM_READS_EVAL"] = num_reads_eval
@@ -181,11 +191,12 @@ class QAOASolver(QCJobShopScheduler):
             optimal_energy = self.get_optimal_energy(optimal_plottable_solution)
             self._benchmarking_data["OPTIMAL_ENERGY"] = optimal_energy
             self._benchmarking_data["SUCCESS_PROBABILITY"] = self.get_success_probability(self._theta, optimal_energy,
-                                                                                          num_reads_eval)
+                                                                                          num_reads_eval, run_simulation=False)
             self._benchmarking_data["T_MIN"] = self._Tmin
         self._benchmarking_data["SOLUTION_ENERGY"] = self._sampleset.first.energy
         self._benchmarking_data["SOLUTION_PROBABILITY"] = self._sampleset.first.num_occurrences/num_reads_eval
         self._benchmarking_data["QAOA_DATA"] = self._qaoa_data
+        self._benchmarking_data["TIME"] = self._time
 
     def draw_quantum_circuit(self):
         if self._quantum_circuit is None:
@@ -203,6 +214,21 @@ class QAOASolver(QCJobShopScheduler):
             self._theta = default_init_theta(self._p)
             self._benchmarking_data["THETA_INIT"] = self._theta
             self._benchmarking_data["THETA"] = self._theta
+
+    def reset_times(self):
+        self._circuit_builder.reset_time()
+        self._qc_sampler.reset_time()
+
+    def update_times(self):
+        self._time["HAMILTONIAN_CONSTRUCTOR"] = self._hamiltonian_constructor.get_time()
+        if self._preprocessor is not None:
+            self._time["PREPROCESSOR"] = self._preprocessor.get_time()
+        self._time["CIRCUIT_BUILDER"] = self._circuit_builder.get_time()
+        self._time["QCSAMPLER"] = self._qc_sampler.get_time()
+        self._time["THETAOPTIMIZER"] = self._theta_optimizer.get_time()
+        if self._postprocessor is not None:
+            self._time["POSTPROCESSOR"] = self._postprocessor.get_time()
+        self._time["REPS"] = self._qc_sampler.get_nreps() - 1
 
 
 def default_init_theta(p):

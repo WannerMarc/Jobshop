@@ -2,6 +2,7 @@ import numpy as np
 import os
 import time
 
+
 class JobShopSampler():
     def __init__(self, path, nJobs=None, nMachines=None, pmin=None, pmax=None):
         self._path = path
