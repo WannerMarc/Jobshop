@@ -40,12 +40,22 @@ def test_js_qaoa(problem_filename: str, solution_filenames: List[str], circuit_d
         solver.store_soution(solution_filenames[i])
     return
 
+
 def compare_qaoa_versions(solution_directory, solvers: List[QAOASolver], p_range: List[int],
                           num_samples_per_setup=10, num_reads_opt=1000, num_reads_eval=10000,
-                          solver_names: List[str]=None, mode='COMPUTE_AND_PLOT', title="QAOA accuracy"):
+                          solver_names: List[str]=None, mode='COMPUTE_AND_PLOT', title="QAOA accuracy", plot='line'):
+    # fill in solver names
+    _solver_names = solver_names
+    if solver_names is None:
+        _solver_names = []
+    if len(_solver_names) < len(solvers):
+        for i in range(len(solvers) - len(_solver_names)):
+            _solver_names.append(solvers[len(solvers) - len(_solver_names) + i].get_solver_name())
+    # solver names need to be unique for seaborn lineplot
+    _solver_names = make_names_unique(_solver_names)
 
     def sol_idx_to_filename(solver_idx: int, p: int, sample_idx: int):
-        return "res_" + str(solver_idx) + "_" + str(p) + "_" + str(sample_idx) + ".txt"
+        return "res_" + _solver_names[solver_idx] + "_" + str(p) + "_" + str(sample_idx) + ".txt"
 
     def filename_to_sol_idx(filename: str):
         name = filename.split('.')[0]
@@ -70,15 +80,6 @@ def compare_qaoa_versions(solution_directory, solvers: List[QAOASolver], p_range
             solver_idx += 1
 
     if mode == 'COMPUTE_AND_PLOT' or mode == 'PLOT_ONLY':
-        # fill in solver names
-        _solver_names = solver_names
-        if solver_names is None:
-            _solver_names = []
-        if len(_solver_names) < len(solvers):
-            for i in range(len(solvers) - len(_solver_names)):
-                _solver_names.append(solvers[len(solvers) - len(_solver_names) + i].get_solver_name())
-        # solver names need to be unique for seaborn lineplot
-        _solver_names = make_names_unique(_solver_names)
         data = []
         for solver_idx in range(len(_solver_names)):
             for p in p_range:
@@ -87,13 +88,21 @@ def compare_qaoa_versions(solution_directory, solvers: List[QAOASolver], p_range
                     with open(filename) as json_file:
                         result_data = json.load(json_file)
                         success_probability = result_data["SUCCESS_PROBABILITY"]
-                        data.append([p, success_probability, _solver_names[solver_idx]])
+                        if plot == 'scatter':
+                            p_new = p + solver_idx/(2 * len(solvers) - 2) - 0.25
+                            data.append([p_new, success_probability, _solver_names[solver_idx]])
+                        else:
+                            data.append([p, success_probability, _solver_names[solver_idx]])
 
         df = pd.DataFrame(np.array(data), columns=['p', 'success_probability', 'solver_name'])
         df = df.astype({'success_probability': 'float64', 'p': 'int32'})
         markers = ["v" for solver in solvers]
-        sns.lineplot(data=df, x="p", y='success_probability', hue='solver_name', style='solver_name', dashes=False,
-                     markers=markers).set_title(title)
+        if plot == 'line':
+            sns.lineplot(data=df, x="p", y='success_probability', hue='solver_name', style='solver_name', dashes=False,
+                        markers=markers).set_title(title)
+        if plot == 'scatter':
+            sns.scatterplot(data=df, x="p", y='success_probability', hue='solver_name', style='solver_name',
+                        markers=markers, estimator=None).set_title(title)
 
 
 def make_names_unique(names: List[str]):

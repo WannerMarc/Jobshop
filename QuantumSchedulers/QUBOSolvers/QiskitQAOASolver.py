@@ -10,6 +10,16 @@ from qiskit_optimization import QuadraticProgram
 from qiskit_optimization.algorithms import MinimumEigenOptimizer
 from qiskit_optimization.translators import from_docplex_mp
 import dimod
+from typing import List, Tuple
+from qiskit_optimization.algorithms import (
+    MinimumEigenOptimizer,
+    RecursiveMinimumEigenOptimizer,
+    SolutionSample,
+    OptimizationResultStatus,
+)
+import matplotlib.pyplot as plt
+from qiskit.visualization import plot_histogram
+
 
 
 class QiskitQAOASolver(SimpleQUBOSolver):
@@ -28,15 +38,16 @@ class QiskitQAOASolver(SimpleQUBOSolver):
         self._seed = seed_simulator
         self._qaoa_mes = None
 
-    def solve(self):
-        qubo = get_quadradic_program(self._hamiltonian)
+    def solve(self, num_reads=1000, num_reads_eval=10000,
+                                 optimal_plottable_solution=None):
+        qubo = get_quadradic_program(-0.5*(self._hamiltonian + np.transpose(self._hamiltonian)))
         print(qubo)
         quantum_instance = QuantumInstance(Aer.get_backend(self._simulator),
                                            seed_simulator=self._seed)
         self._qaoa_mes = QAOA(quantum_instance=quantum_instance, initial_point=self._theta, reps=self._p)
         qaoa = MinimumEigenOptimizer(self._qaoa_mes)
         self._solution = qaoa.solve(qubo)
-        print(self._solution)
+
         self._sampleset = dimod.SampleSet.from_samples([self._solution.x], 'BINARY', [self._solution.fval],
                                                        num_occurrences=[1])
         print(self._sampleset)
@@ -46,6 +57,9 @@ class QiskitQAOASolver(SimpleQUBOSolver):
 
     def draw_quantum_circuit(self):
         self._qaoa_mes.get_optimal_circuit().draw(output='mpl')
+
+    def set_p(self, p):
+        self._p = p
 
 
 def get_quadradic_program(hamiltonian):
@@ -60,3 +74,15 @@ def get_quadradic_program(hamiltonian):
     return qp
     #use from_docplex_mp
     #also add nondiagonal entries
+
+def get_filtered_samples(
+    samples: List[SolutionSample],
+    threshold: float = 0,
+    allowed_status: Tuple[OptimizationResultStatus] = (OptimizationResultStatus.SUCCESS,),
+):
+    res = []
+    for s in samples:
+        if s.status in allowed_status and s.probability > threshold:
+            res.append(s)
+
+    return res

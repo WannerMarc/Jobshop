@@ -26,6 +26,7 @@ class WarmstartCircuitBuilder(CircuitBuilder):
 
         warmstart_thetas = [2 * np.arcsin(np.sqrt(reachable_cstar(c_star, self._epsilon))) for c_star
                             in self._qaoa_data["CONTINUOUS_SOLUTION"]]
+        #print(warmstart_thetas)
 
         self._quantum_circuit.append(qc_init(warmstart_thetas), range(num_qubits))
 
@@ -59,4 +60,10 @@ def u_mixer(beta, thetas):
 
 
 def reachable_cstar(c_star: float, epsilon: float) -> float:
-    return max(min(c_star, 1 - c_star), epsilon)
+    assert epsilon <= 0.5, "Choose epsilon <= 0.5!"
+    ws_theta = c_star
+    if c_star < epsilon:
+        ws_theta = epsilon
+    elif 1 - c_star < epsilon:
+        ws_theta = 1 - epsilon
+    return ws_theta

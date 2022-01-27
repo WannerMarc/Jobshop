@@ -11,6 +11,8 @@ import dimod
 import numpy as np
 from qiskit.visualization import plot_histogram
 import seaborn as sns
+import threading
+import logging
 from dimod import SampleSet
 
 
@@ -37,6 +39,7 @@ class QAOASolver(QCJobShopScheduler):
         self._counts = None
         self._total_counts = None
         self._Tmin = None
+        self._optimal_energy = None
         self._time: dict = {"HAMILTONIAN_CONSTRUCTOR": "NONE", "PREPROCESSOR": "NONE", "CIRCUIT_BUILDER": "NONE",
                             "QCSAMPLER": "NONE", "THETAOPTIMIZER": "NONE", "POSTPROCESSOR": "NONE", "REPS": "NONE"}
         self.init_benchmarking()
@@ -64,7 +67,6 @@ class QAOASolver(QCJobShopScheduler):
         self._total_counts = num_reads
         optimal_plottable_solution = self.extend_optimal_plottable_solution(optimal_plottable_solution)
         self.update_benchmarking(optimal_plottable_solution, num_reads_eval)
-        print(self._benchmarking_data)
 
     def get_solver_name(self):
         return "QAOA"
@@ -80,11 +82,29 @@ class QAOASolver(QCJobShopScheduler):
             print((shape[0]-i) * beta_stepsize, j * gamma_stepsize, result[i, j])
         fig, ax = plt.subplots()
         ax = sns.heatmap(result, center=0, xticklabels=['0', r'$\pi$', r'$2\pi$'], yticklabels=[r'$\pi$', '0'])
-        ax.set_title("Energy landscape")
-        ax.set_xlabel(r'$\gamma$')
-        ax.set_ylabel(r'$\beta$')
+        ax.set_title(r'$F_1(\mathbf{\gamma},\mathbf{\beta})$')
+        ax.set_xlabel(r'$\mathbf{\gamma}$')
+        ax.set_ylabel(r'$\mathbf{\beta}$')
         ax.set_xticks([0, shape[1]/2, shape[1]])
         ax.set_yticks([0, shape[0]])
+
+    def compute_expectation_heatmap_parallel(self, shape, num_reads, nthreads, thread_id):
+        self._circuit_builder.set_bqm(self._hamiltonian, self._num_qubits)
+        expectation = get_expectation(self._hamiltonian, self._circuit_builder, self._qc_sampler, num_reads)
+        beta_stepsize = math.pi / shape[0]
+        gamma_stepsize = 2 * math.pi / shape[1]
+        result = np.zeros(shape)
+        rows_per_thread = int(shape[0] / nthreads)
+        istart = thread_id*rows_per_thread
+        iend = (thread_id+1)*rows_per_thread
+        for i in range(istart, iend):
+            for j in range(shape[1]):
+                result[i, j] = expectation([(shape[0] - i) * beta_stepsize, j * gamma_stepsize])
+        filename = "Threading/thread_"+str(thread_id)+".txt"
+        with open(filename, "w") as file:
+            for i in range(istart, iend):
+                for j in range(shape[1]):
+                    file.write(str(i) + " " + str(j) + " " + str(result[i, j])+"\n")
 
     def get_success_probability(self, theta, optimal_energy, num_reads, run_simulation=True):
         counts = self._counts
@@ -121,7 +141,30 @@ class QAOASolver(QCJobShopScheduler):
         ax.set_xticks([0, shape[1] / 2, shape[1]])
         ax.set_yticks([0, shape[0]])
 
+    def compute_success_probability_heatmap_parallel(self, shape, optimal_plottable_solution, num_reads: int,
+                                                     nthreads, thread_id):
+        optimal_plottable_solution = self.extend_optimal_plottable_solution(optimal_plottable_solution)
+        optimal_energy = self.get_optimal_energy(optimal_plottable_solution)
+        self._circuit_builder.set_bqm(self._hamiltonian, self._num_qubits)
+        beta_stepsize = math.pi / shape[0]
+        gamma_stepsize = 2 * math.pi / shape[1]
+        result = np.zeros(shape)
+        rows_per_thread = int(shape[0] / nthreads)
+        istart = thread_id * rows_per_thread
+        iend = (thread_id + 1) * rows_per_thread
+        for i in range(istart, iend):
+            for j in range(shape[1]):
+                result[i, j] = self.get_success_probability([(shape[0] - i) * beta_stepsize, j * gamma_stepsize],
+                                                            optimal_energy, num_reads)
+        filename = "Threading/thread_" + str(thread_id) + ".txt"
+        with open(filename, "w") as file:
+            for i in range(istart, iend):
+                for j in range(shape[1]):
+                    file.write(str(i) + " " + str(j) + " " + str(result[i, j]) + "\n")
+
     def get_optimal_energy(self, optimal_plottable_solution):
+        if self._optimal_energy is not None:
+            return self._optimal_energy
         optimal_plottable_solution = self.extend_optimal_plottable_solution(optimal_plottable_solution)
         # remove the ones from the plottable solution so that it only starts once
         J, m, T = optimal_plottable_solution.shape
@@ -132,7 +175,9 @@ class QAOASolver(QCJobShopScheduler):
                         np.zeros((self._data.get_P[i, o] - 1))
 
         reduced_solution = self._hamiltonian_constructor.plottable_solution_to_pruned(optimal_plottable_solution)
+        print("Reduced solution: ", reduced_solution)
         optimal_energy = np.dot(np.dot(reduced_solution, self._hamiltonian), reduced_solution)
+        print("Optimal energy: ", optimal_energy)
         return optimal_energy
 
     def extend_optimal_plottable_solution(self, optimal_plottable_solution):
@@ -210,6 +255,7 @@ class QAOASolver(QCJobShopScheduler):
     def reset_theta(self, theta=None):
         if theta is not None:
             assert len(theta) == 2*self._p, "Set p to " + str(len(theta)/2) + " first before resetting theta"
+            self._theta = theta
         else:
             self._theta = default_init_theta(self._p)
             self._benchmarking_data["THETA_INIT"] = self._theta
@@ -237,8 +283,9 @@ def default_init_theta(p):
 
 def key_to_dict(key: str):
     res_dict = {}
-    for i in range(len(key)):
-        res_dict[i] = int(key[i])
+    x = key_to_vector(key)
+    for i in range(len(x)):
+        res_dict[i] = int(x[i])
     return res_dict
 
 

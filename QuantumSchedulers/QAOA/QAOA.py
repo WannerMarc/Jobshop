@@ -73,6 +73,9 @@ class CircuitBuilder(metaclass=ABCMeta):
     def set_bqm(self, bqm, num_qubits):
         self._bqm = bqm
         self._num_qubits = num_qubits
+        
+    def get_bqm(self):
+        return self._bqm
 
     def set_preprocess_data(self, qaoa_data: dict):
         self._qaoa_data = qaoa_data

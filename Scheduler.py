@@ -60,14 +60,17 @@ class JobShopScheduler(metaclass=ABCMeta):
         ax.legend(handles=legend_elements)
 
     def store_solution(self, filepath):
-        if self._plottable_solution is None:
-            self.get_plottable_solution()
+        self.get_plottable_solution()
         self._benchmarking_data["PLOTTABLE_SOLUTION"] = self._plottable_solution.tolist()
+        print(self._benchmarking_data)
         with open(filepath, 'w+') as fp:
             json.dump(self._benchmarking_data, fp)
 
     def get_data(self) -> JobShopSchedulingData:
         return self._data
+
+    def get_benchmarking_data(self):
+        return self._benchmarking_data
 
 from CPLEXScheduler import CPLEXSolver
 from ResultPlotter import ResultPlotter

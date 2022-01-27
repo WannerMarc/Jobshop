@@ -1,7 +1,9 @@
 from Reader import JobShopReader
 from HamiltonianConstructor import JobShopHamiltonianConstructor
 from QuantumScheduler import SASolver, QASolver, QAOASolver, QiskitQAOASolver, CPLEXWarmstart, SDPWarmstart, \
-    SimpleWarmstart, WarmstartCircuitBuilder, IBMRealDevice
+    SimpleWarmstart, WarmstartCircuitBuilder, IBMRealDevice, MCMCMinimizer, LazySampler, QiskitQAOAOptimizer, \
+    RealDeviceQiskitQAOAOptimizer
+
 from Scheduler import CPLEXSolver, ResultPlotter
 import matplotlib.pyplot as plt
 from qiskit import Aer, transpile
@@ -13,6 +15,8 @@ from qiskit.circuit import Parameter
 from qiskit import QuantumCircuit
 from Tests.qaoa_basic_benchmarking import test_js_qaoa, compare_qaoa_versions, plot_result_times, plot_result_times_single_iteration
 from qiskit import IBMQ
+import threading
+import seaborn as sns
 """Construction ongoing, main file is only used for trying out code"""
 
 def test_sampler():
@@ -78,67 +82,104 @@ def compare_qaoas(data):
 
 
 def main():
-
     problem = "Problems/nano_example.txt"
-    solution = "micro_example.txt"
-    ps = [1, 2]
-    solutions = ["Solutions" + os.sep + "res" + str(p) + "_" + solution for p in ps]
+    #solution = "micro_example.txt"
+    #ps = [1, 2]
+    #solutions = ["Solutions" + os.sep + "res" + str(p) + "_" + solution for p in ps]
     reader = JobShopReader()
     reader.read_problem_data(problem)
     data = reader.get_data()
-    solver = CPLEXSolver(data)
-    solver.solve()
-    solver.plot_solution()
-    plt.show()
     hamiltonian_constructor = JobShopHamiltonianConstructor()
+
     preprocessor = SDPWarmstart()
     preprocessor2 = SimpleWarmstart()
-    solver = QAOASolver(data, hamiltonian_constructor, 4, 1, variable_pruning=True, objective_bias=0,
-                        qc_sampler=IBMRealDevice(IBMQ.load_account(), 'ibmq_lima'))
-    solver8 = QAOASolver(data, hamiltonian_constructor, 4, 1, variable_pruning=True, objective_bias=0)
-    compare_qaoa_versions("Solutions_real_device"+os.sep, [solver, solver8], range(1, 3), num_samples_per_setup=5,
-                          num_reads_opt=1000, num_reads_eval=10000, solver_names=["Real_device_QAOA", "QAOA"], mode='PLOT_ONLY')
+
+    solver = QAOASolver(data, hamiltonian_constructor, 4, 2, variable_pruning=True, objective_bias=0,
+                        preprocessor=preprocessor, circuit_builder=WarmstartCircuitBuilder(0))
+
+    solver1 = QAOASolver(data, hamiltonian_constructor, 4, 2, variable_pruning=True, objective_bias=0,
+                        preprocessor=preprocessor2, circuit_builder=WarmstartCircuitBuilder(0))
+    
+    solver2 = QAOASolver(data, hamiltonian_constructor, 4, 3, variable_pruning=True, objective_bias=0)
+
+    compare_qaoa_versions("Solutions_optimal_u" + os.sep, [solver, solver1, solver2],
+                          range(1, 6),
+                          num_samples_per_setup=20, num_reads_opt=1000,
+                          num_reads_eval=10000, solver_names=["WS-QAOA", "Simple WS-QAOA", "QAOA"])
     plt.show()
-    """
-    solver = CPLEXSolver(data)
-    solver.solve()
     solver.plot_solution()
     plt.show()
-    """
-    solver1 = QAOASolver(data, hamiltonian_constructor, 4, 3, variable_pruning=True, objective_bias=1)
 
-    solver2 = QAOASolver(data, hamiltonian_constructor, 4, 3, variable_pruning=True, objective_bias=1,
+    #solver = QAOASolver(data, hamiltonian_constructor, 4, 2, variable_pruning=True, objective_bias=0,
+                        #theta_optimizer=MCMCMinimizer(mcmc_steps=3000))
+    #solver.solve(num_reads=100)
+    #return
+    nthreads = 8
+    imshape = (16, 16)
+    shots = 1000
+
+    def thread_function(js_data, shape, nreads, n_threads, t_id):
+        solver = QAOASolver(js_data, JobShopHamiltonianConstructor(), 4, 1, variable_pruning=True, objective_bias=0)
+        solver.compute_expectation_heatmap_parallel(shape, nreads, n_threads, t_id)
+
+    threads = []
+    """
+    for i in range(nthreads):
+        t = threading.Thread(target=thread_function, args=(data, imshape, shots, nthreads, i))
+        threads.append(t)
+        t.start()
+
+    for t in threads:
+        t.join()
+    """
+    result = np.zeros(imshape)
+    for filename in os.listdir("Threading"):
+        with open("Threading" + os.sep + filename) as file:
+            for line in file.readlines():
+                word = line.split(' ')
+                result[int(word[0]), int(word[1])] = float(word[2])
+    fig, ax = plt.subplots()
+    ax = sns.heatmap(result, center=0, xticklabels=['0', r'$\pi$', r'$2\pi$'], yticklabels=[r'$\pi$', '0'])
+    ax.set_title(r'$F_1(\mathbf{\gamma},\mathbf{\beta})$')
+    ax.set_xlabel(r'$\mathbf{\gamma}$')
+    ax.set_ylabel(r'$\mathbf{\beta}$')
+    ax.set_xticks([0, imshape[1] / 2, imshape[1]])
+    ax.set_yticks([0, imshape[0]])
+    plt.show()
+    return
+    plt.show()
+
+    solver2 = QAOASolver(data, hamiltonian_constructor, 4, 3, variable_pruning=True, objective_bias=0,
                          preprocessor=preprocessor, circuit_builder=WarmstartCircuitBuilder(epsilon=0.25))
-    solver3 = QAOASolver(data, hamiltonian_constructor, 4, 3, variable_pruning=True, objective_bias=1,
+    solver3 = QAOASolver(data, hamiltonian_constructor, 4, 3, variable_pruning=True, objective_bias=0,
                          preprocessor=preprocessor, circuit_builder=WarmstartCircuitBuilder(epsilon=0))
-    solver4 = QAOASolver(data, hamiltonian_constructor, 4, 3, variable_pruning=True, objective_bias=1,
-                         preprocessor=preprocessor2, circuit_builder=WarmstartCircuitBuilder(epsilon=0.25))
+    solver4 = QAOASolver(data, hamiltonian_constructor, 4, 3, variable_pruning=True, objective_bias=0,
+                         preprocessor=preprocessor2, circuit_builder=WarmstartCircuitBuilder(epsilon=0.2))
     solver5 = QAOASolver(data, hamiltonian_constructor, 4, 3, variable_pruning=True, objective_bias=0,
-                         preprocessor=preprocessor, circuit_builder=WarmstartCircuitBuilder(epsilon=0))
+                         preprocessor=preprocessor, circuit_builder=WarmstartCircuitBuilder(epsilon=0.3))
     solver6 = QAOASolver(data, hamiltonian_constructor, 4, 3, variable_pruning=True, objective_bias=0,
                          preprocessor=preprocessor, circuit_builder=WarmstartCircuitBuilder(epsilon=0.4))
     solver7 = QAOASolver(data, hamiltonian_constructor, 4, 3, variable_pruning=True, objective_bias=0,
-                         preprocessor=preprocessor, circuit_builder=WarmstartCircuitBuilder(epsilon=0.5))
+                         preprocessor=preprocessor, circuit_builder=WarmstartCircuitBuilder(epsilon=0.1))
 
-
-    compare_qaoa_versions("Solutions_nondegenerate" + os.sep, [solver1, solver2, solver3, solver4],
-                          range(1, 6),
-                          num_samples_per_setup=100, num_reads_opt=1000,
-                          num_reads_eval=10000, solver_names=["QAOA", "opt-WS-QAOA-0.25", "opt-WS-QAOA-0", "simple-WS-QAOA-0.25"])
+    compare_qaoa_versions("Solutions_optimal_u" + os.sep, [solver, solver1],
+                          range(1, 7),
+                          num_samples_per_setup=20, num_reads_opt=30,
+                          num_reads_eval=10000, solver_names=["MCMC_QAOA", "QAOA"])
 
     #plot_result_times("Solutions_maxp" + os.sep)
 
     #plotter = ResultPlotter("Solutions\\res_0_1_0.txt")
     #plotter.plot_solution()
     plt.show()
-    '''test_js_qaoa(problem, solutions, ps)
-    plotter = ResultPlotter(solutions[0])
-    plotter.plot_solution()
-    plt.show()
+    #test_js_qaoa(problem, solutions, ps)
+    #plotter = ResultPlotter(solutions[0])
+    #plotter.plot_solution()
+    #plt.show()
     '''
     #test_js_qaoa(problem, solutions, ps)
 
-    """
+    
     qaoa_solver._circuit_builder.set_bqm(qaoa_solver._hamiltonian, qaoa_solver._num_qubits)
     #qaoa_solver._circuit_builder.set_bqm(qaoa_solver._hamiltonian - np.identity(qaoa_solver._num_qubits),
                                          #qaoa_solver._num_qubits)
@@ -155,12 +196,12 @@ def main():
         print(expected_value(counts, 512, qaoa_solver._hamiltonian))
         #qaoa_solver._circuit_builder.set_bqm(qaoa_solver._hamiltonian - np.identity(qaoa_solver._num_qubits),
                                              #qaoa_solver._num_qubits)
-    """
+    
     #qaoa_solver.plot_expectation_heatmap((25, 50), 1000)
     #qaoa_solver.solve()
     #qaoa_solver.plot_solution()
     #plt.show()
-
+'''
 
 
 if __name__ == "__main__":

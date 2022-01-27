@@ -37,3 +37,7 @@ from QuantumSchedulers.QAOA.Preprocessors.SDPWarmstart import SDPWarmstart
 from QuantumSchedulers.QAOA.Preprocessors.SimpleWarmstart import SimpleWarmstart
 from QuantumSchedulers.QAOA.CircuitBuilders.WarmstartCircuitBuilder import WarmstartCircuitBuilder
 from QuantumSchedulers.QAOA.QCSamplers.IBMRealDevice import IBMRealDevice
+from QuantumSchedulers.QAOA.ThetaOptimizers.MCMCMinimizer import MCMCMinimizer
+from QuantumSchedulers.QAOA.ThetaOptimizers.QiskitQAOAOptimizer import QiskitQAOAOptimizer
+from QuantumSchedulers.QAOA.QCSamplers.LazySampler import LazySampler
+from QuantumSchedulers.QAOA.ThetaOptimizers.RealDeviceQiskitQAOAOptimizer import RealDeviceQiskitQAOAOptimizer
