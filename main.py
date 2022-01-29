@@ -17,6 +17,7 @@ from Tests.qaoa_basic_benchmarking import test_js_qaoa, compare_qaoa_versions, p
 from qiskit import IBMQ
 import threading
 import seaborn as sns
+from HamiltonianConstructors.LazyHamiltonianConstructor import LazyHamiltonianConstructor
 """Construction ongoing, main file is only used for trying out code"""
 
 def test_sampler():
@@ -90,6 +91,14 @@ def main():
     reader.read_problem_data(problem)
     data = reader.get_data()
     hamiltonian_constructor = JobShopHamiltonianConstructor()
+    lhc = LazyHamiltonianConstructor(np.array([[-1, 0, 2], [0, -1, 0], [0, 0, -1]]))
+
+
+    solver2 = QAOASolver(data, hamiltonian_constructor, 4, 3, variable_pruning=True, objective_bias=0,
+                         theta_optimizer=MCMCMinimizer(mcmc_steps=100000))
+    #solver2.plot_expectation_heatmap((32, 32), 100)
+    #plt.show()
+    solver2.solve(num_reads=1000)
 
     preprocessor = SDPWarmstart()
     preprocessor2 = SimpleWarmstart()
