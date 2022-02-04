@@ -14,7 +14,7 @@ import seaborn as sns
 
 
 class MCMCMinimizer(ThetaOptimizer):
-    def __init__(self, method: str="COBYLA", beta=5, xi=0.5, epsilon=0.05, eta=0.1, mcmc_steps=1000):
+    def __init__(self, method: str="COBYLA", beta=2.5, xi=0.5, epsilon=0.1, eta=0.1, mcmc_steps=1000):
         super().__init__()
         self._method = method
         self._beta = beta
@@ -31,6 +31,7 @@ class MCMCMinimizer(ThetaOptimizer):
         self._lambdas = list()
         self._steps = 0
         self._theta_t = None
+        self._best_sample = (1000, None)
 
     def optimize_theta(self, circuit_builder: CircuitBuilder, qc_sampler: QCSampler, num_reads: int, hamiltonian,
                        theta, verbose=False):
@@ -38,12 +39,12 @@ class MCMCMinimizer(ThetaOptimizer):
         self._qc_sampler = qc_sampler
         self._num_reads = num_reads
         self._hamiltonian = hamiltonian
+        self._steps = 0
         theta = np.array(theta)
         self._C = 0.5 * np.sum(np.diag(self._hamiltonian)) \
                   + np.sum(self._hamiltonian - np.diag(np.diag(self._hamiltonian))) / 4
-        for i in range(3):
-            print([(self._hamiltonian[i, j] + self._hamiltonian[j, i])
-                                                for j in range(3)])
+        sns.set(style="darkgrid")
+
         """
         Test case for lambda_t
         shape = (32, 32)
@@ -68,7 +69,7 @@ class MCMCMinimizer(ThetaOptimizer):
 
         self._bounds = [(0, math.pi) if k < theta.size / 2 else (0, 2 * math.pi) for k in range(theta.size)]
         self.mcmc_init(theta)
-        for i in range(self._mcmc_steps):
+        while self._steps < self._mcmc_steps:
             print("Theta ", self._steps, self._theta_t, "Lambda_t", self._lambda_t, "Grad_lambda_t", self._grad_lambda_t,
                   "Sigma2_t", self._sigma2_t)
             self.mcmc_step()
@@ -76,19 +77,24 @@ class MCMCMinimizer(ThetaOptimizer):
                 continue
             self._lambdas.append(self._lambda_t)
             self._steps += 1
-            if self._steps > 1000:
+            if self._steps > 2500:
                 self._lambdas.pop(0)
-            if self._steps % 1000 == 0 and self._steps >= 1000:
-                sns.histplot(self._lambdas)
+            if self._steps % 2500 == 0 and self._steps >= 2500:
+                ax = sns.histplot(self._lambdas, stat='probability', bins=50)
+                ax.set_xlabel(r'$F_1(\mathbf{\gamma}, \mathbf{\beta})$')
                 plt.show()
+            if self._lambda_t < self._best_sample[0]:
+                self._best_sample = (self._lambda_t, self._theta_t)
 
         expectation = get_expectation(self._hamiltonian, self._circuit_builder, self._qc_sampler, self._num_reads)
 
-        res = minimize(expectation, self._theta_t, method=self._method)
+        print(self._best_sample)
+
+        res = minimize(expectation, self._best_sample[1], method=self._method)
         self._theta = res.x
         self._expected_energy = res.fun
         if verbose:
-            print(res)
+            print(res.x)
 
     def get_name(self):
         return "MCMC_QAOA"
@@ -102,14 +108,14 @@ class MCMCMinimizer(ThetaOptimizer):
     def mcmc_step(self):
 
         theta_d = self._theta_t - np.array([dist.rvs() for dist in self._proposal_distributions_t])
-        """
-        #non periodic boundary
+        
+        #periodic boundary
         for k in range(theta_d.size):
             if theta_d[k] < self._bounds[k][0]:
-                theta_d[k] = self._bounds[k][0]
+                theta_d[k] += self._bounds[k][1]
             elif theta_d[k] > self._bounds[k][1]:
-                theta_d[k] = self._bounds[k][1]
-        """
+                theta_d[k] -= self._bounds[k][1]
+        
         lambda_d, sigma2_d = self.compute_total_lambda_and_sigma2(theta_d)
         grad_lambda_d = self.compute_grad_lambda(theta_d)
         proposal_distributions_d = self.get_proposal_distributions(grad_lambda_d, sigma2_d)
@@ -128,7 +134,7 @@ class MCMCMinimizer(ThetaOptimizer):
 
         g_d_given_t = np.prod([self._proposal_distributions_t[k].pdf(self._theta_t[k] - theta_d[k]) for k in range(theta_d.size)])
         g_t_given_d = np.prod([proposal_distributions_d[k].pdf(theta_d[k] - self._theta_t[k]) for k in range(theta_d.size)])
-        print("Ratio", g_t_given_d/g_d_given_t)
+        print("Ratio", g_t_given_d, g_d_given_t)
         #print([proposal_distributions_t[k].pdf(theta_t[k] - theta_d[k]) for k in range(theta_d.size)])
         #print([proposal_distributions_d[k].pdf(theta_d[k] - theta_t[k]) for k in range(theta_t.size)])
         return np.minimum(1, self.p_boltzmann(lambda_d) * g_t_given_d / (self.p_boltzmann(self._lambda_t) * g_d_given_t))
